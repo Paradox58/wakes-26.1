@@ -27,7 +27,7 @@ public class WakesConfigScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         super.extractRenderState(context, mouseX, mouseY, delta);
-        // TODO: text rendering via GuiTextRenderState for 26.1
+        context.centeredText(this.font, this.title.getString(), this.width / 2, this.height / 4 + 20, 0xFFFFFFFF);
     }
 
 }

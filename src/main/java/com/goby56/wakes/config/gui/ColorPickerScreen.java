@@ -81,7 +81,21 @@ public class ColorPickerScreen extends Screen {
     @Override
     public void extractRenderState(GuiGraphicsExtractor context, int mouseX, int mouseY, float delta) {
         super.extractRenderState(context, mouseX, mouseY, delta);
-        // TODO: text rendering via GuiTextRenderState for 26.1
+        // Title above the color-interval slider
+        context.centeredText(this.font,
+                WakesUtils.translatable("gui", "colorIntervalSlider", "title").getString(),
+                this.width / 2, 12, 0xFFFFFFFF);
+
+        // Info/help panel toggled by the info button
+        if (this.showInfoText) {
+            String infoText = WakesUtils.translatable("gui", "colorIntervalSlider", "infoText").getString();
+            int y = 100;
+            for (String line : infoText.split("\n")) {
+                if (line.isEmpty()) continue;
+                context.text(this.font, line, (int) (this.width / 2f - this.width * 0.8f / 2), y, 0xFFE0E0E0);
+                y += this.font.lineHeight + 2;
+            }
+        }
     }
 
     @Override
