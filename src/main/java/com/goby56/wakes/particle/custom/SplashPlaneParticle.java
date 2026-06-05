@@ -35,7 +35,7 @@ public class SplashPlaneParticle extends Particle {
 
     Vec3 direction = Vec3.ZERO;
 
-    private final SimulationNode simulationNode = new SimulationNode.SplashPlaneSimulation();
+    private SimulationNode simulationNode = new SimulationNode.SplashPlaneSimulation();
 
     public NativeImage image;
 
@@ -97,6 +97,12 @@ public class SplashPlaneParticle extends Particle {
             Vec3 particleVelocity = Vec3.directionFromRotation((float) (45 * random.nextDouble()), (float) (-this.yaw + 30 * (random.nextDouble() - 0.5f))).scale(1.5 * vel.length());
             this.level.addParticle(ModParticles.SPLASH_CLOUD.withOwner(this.owner), particlePos.x + particleOffset.x, this.y, particlePos.z + particleOffset.z, particleVelocity.x, particleVelocity.y, particleVelocity.z);
             this.level.addParticle(ModParticles.SPLASH_CLOUD.withOwner(this.owner), particlePos.x - particleOffset.x, this.y, particlePos.z - particleOffset.z, particleVelocity.x, particleVelocity.y, particleVelocity.z);
+        }
+
+        // Recreate the simulation node if the configured resolution changed, otherwise its
+        // arrays (sized for the old resolution) would be indexed out of bounds. (#resolution-change crash)
+        if (this.simulationNode.res != WakeHandler.resolution.res) {
+            this.simulationNode = new SimulationNode.SplashPlaneSimulation();
         }
 
         this.simulationNode.tick((float) wakeProducer.wakes$getHorizontalVelocity(), null, null, null, null);
