@@ -9,14 +9,18 @@ import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.opengl.GlTexture;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.geom.builders.UVPair;
 import net.minecraft.client.renderer.texture.DynamicTexture;
+import net.minecraft.resources.Identifier;
 
 import java.util.Arrays;
 import java.util.function.Supplier;
 
 public class WakeTextureAtlas {
     public static final int CHUNKS_PER_ROW = 16;
+
+    public static final Identifier ATLAS_ID = Identifier.fromNamespaceAndPath(WakesClient.MOD_ID, "wake_atlas");
 
     public final int resolution;
 
@@ -39,6 +43,9 @@ public class WakeTextureAtlas {
         Supplier<String> name = () -> String.format("%s %dx%x texture atlas",
                 WakesClient.MOD_ID, resolution, resolution);
         dynamicTexture = new BetterDynamicTexture(name, nativeImage);
+        // Register with the texture manager so RenderType can bind it by Identifier
+        // (this makes wakes render through the game's buffer system -> works under shaders/Iris)
+        Minecraft.getInstance().getTextureManager().register(ATLAS_ID, dynamicTexture);
     }
 
     public void setResolution(int wakeNodeRes) {

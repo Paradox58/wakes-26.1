@@ -7,24 +7,20 @@ import com.goby56.wakes.duck.ProducesWake;
 import com.goby56.wakes.particle.custom.SplashPlaneParticle;
 import com.goby56.wakes.simulation.WakeHandler;
 import com.goby56.wakes.utils.WakesUtils;
-import com.mojang.blaze3d.buffers.GpuBuffer;
-import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.systems.RenderPass;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.FilterMode;
-import com.mojang.blaze3d.textures.GpuSampler;
 import com.mojang.blaze3d.vertex.*;
 import io.github.jdiemke.triangulation.DelaunayTriangulator;
 import io.github.jdiemke.triangulation.NotEnoughPointsException;
 import io.github.jdiemke.triangulation.Triangle2D;
 import io.github.jdiemke.triangulation.Vector2D;
-import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
-import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
+import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.rendertype.RenderType;
+import net.minecraft.client.renderer.rendertype.RenderTypes;
+import net.minecraft.client.renderer.texture.OverlayTexture;
+import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.world.entity.Entity;
 import com.mojang.math.Axis;
 import net.minecraft.world.phys.Vec3;
@@ -33,11 +29,8 @@ import org.joml.Matrix4f;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.OptionalDouble;
-import java.util.OptionalInt;
 
-public class SplashPlaneRenderer implements WorldRenderEvents.EndMain {
-    private static final ByteBufferBuilder allocator = new ByteBufferBuilder(RenderType.BIG_BUFFER_SIZE);
+public class SplashPlaneRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
 
     private static ArrayList<Vector2D> points;
     private static List<Triangle2D> triangles;
@@ -56,27 +49,19 @@ public class SplashPlaneRenderer implements WorldRenderEvents.EndMain {
 
     private static final double SQRT_8 = Math.sqrt(8);
 
-    private static RenderPipeline getPipeline() {
-        if (WakesClient.areShadersEnabled) {
-            return RenderPipelines.TRANSLUCENT_MOVING_BLOCK;
-        } else {
-            return RenderPipelines.BEACON_BEAM_TRANSLUCENT;
-        }
-    }
-
     @Override
-    public void endMain(WorldRenderContext context) {
+    public void afterTranslucentTerrain(LevelRenderContext context) {
         if (WakeHandler.getInstance().isEmpty()) {
             return;
         }
         WakeHandler wakeHandler = WakeHandler.getInstance().get();
         for (SplashPlaneParticle particle : wakeHandler.getVisibleSplashPlanes()) {
-            SplashPlaneRenderer.render(particle.owner, particle, context, context.matrices());
+            SplashPlaneRenderer.render(particle.owner, particle, context, new PoseStack());
         }
     }
 
 
-    public static <T extends Entity> void render(T entity, SplashPlaneParticle splashPlane, WorldRenderContext context, PoseStack matrices) {
+    public static <T extends Entity> void render(T entity, SplashPlaneParticle splashPlane, LevelRenderContext context, PoseStack matrices) {
         if (wakeTextures == null) initTextures();
         if (WakesConfig.disableMod || !WakesUtils.getEffectRuleFromSource(entity).renderPlanes) {
             return;
@@ -86,7 +71,7 @@ public class SplashPlaneRenderer implements WorldRenderEvents.EndMain {
                 splashPlane.owner instanceof LocalPlayer) {
             return;
         }
-        splashPlane.updateYaw(context.gameRenderer().getMainCamera().getPartialTickTime());
+        splashPlane.updateYaw(context.gameRenderer().getMainCamera().getCameraEntityPartialTicks(net.minecraft.client.Minecraft.getInstance().getDeltaTracker()));
 
         matrices.pushPose();
         splashPlane.translateMatrix(context.gameRenderer().getMainCamera(), matrices);
@@ -103,12 +88,12 @@ public class SplashPlaneRenderer implements WorldRenderEvents.EndMain {
             return;
         }
         texture.loadTexture(splashPlane.image);
-        renderSurface(matrix, texture);
+        renderSurface(matrix, texture, context.bufferSource());
     }
 
-    private static void renderSurface(Matrix4f matrix, SplashPlaneTexture splashTexture) {
-        RenderPipeline pipeline = getPipeline();
-        BufferBuilder bb = Tesselator.getInstance().begin(pipeline.getVertexFormatMode(), pipeline.getVertexFormat());
+    private static void renderSurface(Matrix4f matrix, SplashPlaneTexture splashTexture, MultiBufferSource.BufferSource bufferSource) {
+        RenderType type = RenderTypes.entityTranslucentEmissive(splashTexture.id);
+        VertexConsumer vc = bufferSource.getBuffer(type);
         for (int s = -1; s < 2; s++) {
             if (s == 0) continue;
             for (int i = 0; i < vertices.size(); i += 3) {
@@ -118,51 +103,32 @@ public class SplashPlaneRenderer implements WorldRenderEvents.EndMain {
                 Vec3 n1 = normals.get(i + 1);
                 Vec3 v2 = vertices.get(i + 2);
                 Vec3 n2 = normals.get(i + 2);
-                addDegenerateQuad(bb, matrix, s, v0, n0, v1, n1, v2, n2);
-                addDegenerateQuad(bb, matrix, s, v0, n0, v2, n2, v1, n1);
+                addDegenerateQuad(vc, matrix, s, v0, n0, v1, n1, v2, n2);
+                addDegenerateQuad(vc, matrix, s, v0, n0, v2, n2, v1, n1);
             }
         }
-
-        MeshData built = bb.buildOrThrow();
-        MeshData.DrawState drawState = built.drawState();
-        VertexFormat format = drawState.format();
-        GpuBuffer vertexBuffer = format.uploadImmediateVertexBuffer(built.vertexBuffer());
-        built.sortQuads(allocator, RenderSystem.getProjectionType().vertexSorting());
-        GpuBuffer indexBuffer = pipeline.getVertexFormat().uploadImmediateIndexBuffer(built.indexBuffer());
-
-        GpuSampler sampler = RenderSystem.getSamplerCache().getRepeat(FilterMode.NEAREST);
-        try (RenderPass pass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
-                () -> "Splash Plane",
-                Minecraft.getInstance().getMainRenderTarget().getColorTextureView(),
-                OptionalInt.empty(),
-                Minecraft.getInstance().getMainRenderTarget().getDepthTextureView(),
-                OptionalDouble.empty())) {
-            pass.setPipeline(pipeline);
-            RenderSystem.bindDefaultUniforms(pass);
-            pass.bindTexture("Sampler0", splashTexture.getTextureView(), sampler);
-            pass.setVertexBuffer(0, vertexBuffer);
-            pass.setIndexBuffer(indexBuffer, drawState.indexType());
-            pass.drawIndexed(0 / format.getVertexSize(), 0, drawState.indexCount(), 1);
-        }
-        built.close();
+        // The splash plane textures are shared per resolution, so flush this particle's
+        // geometry now before the next particle overwrites the texture.
+        bufferSource.endBatch(type);
     }
 
-    private static void addVertex(BufferBuilder bb, Matrix4f matrix, int side, Vec3 vertex, Vec3 normal) {
-        bb.addVertex(matrix,
+    private static void addVertex(VertexConsumer vc, Matrix4f matrix, int side, Vec3 vertex, Vec3 normal) {
+        vc.addVertex(matrix,
                         (float) (side * (vertex.x * WakesConfig.splashPlaneWidth + WakesConfig.splashPlaneGap)),
                         (float) (vertex.z * WakesConfig.splashPlaneHeight),
                         (float) (vertex.y * WakesConfig.splashPlaneDepth))
-                .setUv((float) vertex.x, (float) vertex.y)
-                .setLight(LightTexture.FULL_BRIGHT)
                 .setColor(1f, 1f, 1f, 1f)
+                .setUv((float) vertex.x, (float) vertex.y)
+                .setOverlay(OverlayTexture.NO_OVERLAY)
+                .setLight(LightCoordsUtil.FULL_BRIGHT)
                 .setNormal((float) normal.x, (float) normal.y, (float) normal.z);
     }
 
-    private static void addDegenerateQuad(BufferBuilder bb, Matrix4f matrix, int side, Vec3 a, Vec3 an, Vec3 b, Vec3 bn, Vec3 c, Vec3 cn) {
-        addVertex(bb, matrix, side, a, an);
-        addVertex(bb, matrix, side, b, bn);
-        addVertex(bb, matrix, side, c, cn);
-        addVertex(bb, matrix, side, c, cn);
+    private static void addDegenerateQuad(VertexConsumer vc, Matrix4f matrix, int side, Vec3 a, Vec3 an, Vec3 b, Vec3 bn, Vec3 c, Vec3 cn) {
+        addVertex(vc, matrix, side, a, an);
+        addVertex(vc, matrix, side, b, bn);
+        addVertex(vc, matrix, side, c, cn);
+        addVertex(vc, matrix, side, c, cn);
     }
 
     private static double upperBound(double x) {

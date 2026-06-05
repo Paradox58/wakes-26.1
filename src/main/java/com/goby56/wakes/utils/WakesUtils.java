@@ -6,14 +6,11 @@ import com.goby56.wakes.config.enums.EffectSpawningRule;
 import com.goby56.wakes.duck.ProducesWake;
 import com.goby56.wakes.particle.ModParticles;
 import com.goby56.wakes.particle.WithOwnerParticleType;
-import com.goby56.wakes.render.LightmapWrapper;
 import com.goby56.wakes.simulation.WakeHandler;
 import com.goby56.wakes.simulation.WakeNode;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.player.RemotePlayer;
-import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.LivingEntity;
@@ -34,10 +31,7 @@ import java.util.List;
 public class WakesUtils {
 
     public static int getLightColor(Level world, BlockPos blockPos) {
-        int lightCoordinate = LevelRenderer.getLightColor(world, blockPos);
-        int x = LightTexture.block(lightCoordinate);
-        int y = LightTexture.sky(lightCoordinate);
-        return LightmapWrapper.readPixel(x, y);
+        return 0xFFFFFFFF;
     }
 
     public static void placeFallSplash(Entity entity) {
