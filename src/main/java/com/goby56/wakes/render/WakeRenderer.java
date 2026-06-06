@@ -75,12 +75,16 @@ public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
     }
 
     private void addVertices(Matrix4fc matrix, VertexConsumer vc, List<WakeChunk> chunks) {
+        // Water-displacing shaders write a wavy water surface into the depth buffer, which
+        // can occlude (clip) the flat wake plane. Lift the wake slightly when shaders are
+        // active so it stays above the displaced surface. (tunable in config)
+        float extraOffset = WakesClient.areShadersEnabled ? WakesConfig.shaderWaterHeightOffset : 0f;
         for (WakeChunk wakeChunk : chunks) {
             UVPair uv = wakeChunk.drawContext.getUV();
             float uvOffset = wakeChunk.drawContext.getUVOffset();
 
             float x0 = (float) wakeChunk.pos.x;
-            float y = (float) (wakeChunk.pos.y + WakeNode.WATER_OFFSET);
+            float y = (float) (wakeChunk.pos.y + WakeNode.WATER_OFFSET) + extraOffset;
             float z0 = (float) wakeChunk.pos.z;
             float x1 = x0 + WakeChunk.WIDTH;
             float z1 = z0 + WakeChunk.WIDTH;
