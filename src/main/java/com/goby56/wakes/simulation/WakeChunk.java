@@ -8,6 +8,7 @@ import com.goby56.wakes.utils.WakesUtils;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.BiomeColors;
+import net.minecraft.core.BlockPos;
 import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -158,13 +159,18 @@ public class WakeChunk {
         for (int nodeZ = 0; nodeZ < WIDTH; nodeZ++) {
             for (int nodeX = 0; nodeX < WIDTH; nodeX++) {
                 WakeNode node = this.get(nodeX, nodeZ);
-                int lightCol = LightCoordsUtil.FULL_BRIGHT;
                 int fluidColor = 0;
                 float opacity = 0;
+                // Light sampled at the node's four block corners, interpolated per pixel
+                // so lighting transitions smoothly across blocks instead of stepping.
+                int l00 = LightCoordsUtil.FULL_BRIGHT, l10 = l00, l01 = l00, l11 = l00;
                 if (node != null) {
-                    fluidColor = BiomeColors.getAverageWaterColor(world, node.blockPos());
-                    lightCol = WakesUtils.getLightColor(world, node.blockPos());
-                    // TODO LERP LIGHT FROM SURROUNDING BLOCKS
+                    BlockPos bp = node.blockPos();
+                    fluidColor = BiomeColors.getAverageWaterColor(world, bp);
+                    l00 = WakesUtils.getLightColor(world, bp);
+                    l10 = WakesUtils.getLightColor(world, bp.east());
+                    l01 = WakesUtils.getLightColor(world, bp.south());
+                    l11 = WakesUtils.getLightColor(world, bp.east().south());
                     opacity = (float) ((-Math.pow(node.t, 2) + 1) * WakesConfig.wakeOpacity);
                 }
 
@@ -174,6 +180,9 @@ public class WakeChunk {
                     for (int y = 0; y < nodeRes; y++) {
                         int color = 0;
                         if (node != null) {
+                            float fx = (x + 0.5f) / nodeRes;
+                            float fy = (y + 0.5f) / nodeRes;
+                            int lightCol = WakesUtils.lerpLightColor(l00, l10, l01, l11, fx, fy);
                             color = node.simulationNode.getPixelColor(x, y, fluidColor, lightCol, opacity);
                         }
                         drawContext.draw(x + xOffset, y + yOffset, color);
