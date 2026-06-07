@@ -57,7 +57,9 @@ public class WakesClient implements ClientModInitializer {
 		// Rendering events
 		wakeRenderer = new WakeRenderer();
 		LevelRenderEvents.AFTER_TRANSLUCENT_TERRAIN.register(wakeRenderer);
-		LevelRenderEvents.AFTER_TRANSLUCENT_TERRAIN.register(new SplashPlaneRenderer());
+		SplashPlaneRenderer splashPlaneRenderer = new SplashPlaneRenderer();
+		LevelRenderEvents.AFTER_TRANSLUCENT_TERRAIN.register(splashPlaneRenderer);
+		LevelRenderEvents.BEFORE_TRANSLUCENT_TERRAIN.register(splashPlaneRenderer);
 
 		SplashPlaneRenderer.initSplashPlane();
         DebugScreenEntries.register(

@@ -29,7 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public class SplashPlaneRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
+public class SplashPlaneRenderer implements LevelRenderEvents.AfterTranslucentTerrain, LevelRenderEvents.BeforeTranslucentTerrain {
 
     private static ArrayList<Vector2D> points;
     private static List<Triangle2D> triangles;
@@ -48,8 +48,29 @@ public class SplashPlaneRenderer implements LevelRenderEvents.AfterTranslucentTe
 
     private static final double SQRT_8 = Math.sqrt(8);
 
+    private static boolean cameraSubmerged(LevelRenderContext context) {
+        return context.gameRenderer().getMainCamera().getFluidInCamera()
+                == net.minecraft.world.level.material.FogType.WATER;
+    }
+
+    // Splash planes are 3-D sheets rising above the water. Normally render them after the
+    // translucent water (unchanged behavior above water). But when the camera is underwater,
+    // the water surface would occlude them, so render BEFORE translucent water instead: opaque
+    // terrain (already drawn) still occludes them correctly, while the water draws afterwards
+    // and, being translucent, lets the splash plane show through from below.
     @Override
     public void afterTranslucentTerrain(LevelRenderContext context) {
+        if (cameraSubmerged(context)) return;
+        renderAll(context);
+    }
+
+    @Override
+    public void beforeTranslucentTerrain(LevelRenderContext context) {
+        if (!cameraSubmerged(context)) return;
+        renderAll(context);
+    }
+
+    private void renderAll(LevelRenderContext context) {
         if (WakeHandler.getInstance().isEmpty()) {
             return;
         }
