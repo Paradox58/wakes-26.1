@@ -66,12 +66,24 @@ public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
             RenderType type = renderType();
             VertexConsumer vc = bufferSource.getBuffer(type);
 
-            addVertices(matrix, vc, wakeChunks, cameraSubmerged);
+            // When a shaderpack is active, make the wake follow the shader's water waves:
+            //  1) tag the vertices with water's block id (mc_Entity) so the shader's
+            //     water-detection passes, and
+            //  2) route the draw through the water program where the wave displacement lives.
+            boolean useWaterProgram = WakesClient.areShadersEnabled && IrisCompat.isLoaded();
+
+            if (useWaterProgram) IrisCompat.beginWaterBlock(vc);
+            // Subdivide into a grid only when the shader is displacing the wake, so it follows
+            // the wave curve. Without shaders a single flat quad is fine (and cheaper).
+            addVertices(matrix, vc, wakeChunks, cameraSubmerged, useWaterProgram);
+            if (useWaterProgram) IrisCompat.endWaterBlock(vc);
 
             matrices.popPose();
 
+            if (useWaterProgram) IrisCompat.beginWaterProgram();
             // Flush immediately so it draws into the currently-bound (Iris) framebuffer
             bufferSource.endBatch(type);
+            if (useWaterProgram) IrisCompat.endWaterProgram();
         } catch (Throwable t) {
             WakesClient.LOGGER.error("WakeRenderer: EXCEPTION during render", t);
         }
@@ -80,32 +92,53 @@ public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
         WakesDebugInfo.quadsRendered = wakeChunks.size();
     }
 
-    private static final float SURFACE_EPSILON = 0.02f;
+    private static final float SURFACE_EPSILON = 0.06f;
     // When submerged, drop the plane clearly below the water surface so it isn't occluded
     // by the water's depth when looking up from underwater.
     private static final float UNDERWATER_DROP = 0.15f;
+    // Grid cells per chunk axis when shaders displace the wake. One quad spanning the whole
+    // 8-block chunk only has 4 corners, so shader wave displacement (sampled per vertex) is
+    // linearly interpolated across 8 blocks and cuts through the finely-waved water. Subdividing
+    // adds vertices so the wake follows the wave curve and stops clipping.
+    private static final int SHADER_GRID = WakeChunk.WIDTH; // one cell per block
 
-    private void addVertices(Matrix4fc matrix, VertexConsumer vc, List<WakeChunk> chunks, boolean cameraSubmerged) {
-        // Water-displacing shaders write a wavy water surface into the depth buffer, which
-        // can occlude (clip) the flat wake plane. Lift the wake slightly when shaders are
-        // active so it stays above the displaced surface. (tunable in config)
-        float extraOffset = WakesClient.areShadersEnabled ? WakesConfig.shaderWaterHeightOffset : 0f;
-        // Place the single wake plane just below the surface when the camera is underwater
-        // (so it isn't occluded by the water from below), otherwise just above it. Using one
-        // plane avoids the doubled/blurry look two offset planes would produce.
-        float surfaceBias = cameraSubmerged ? -UNDERWATER_DROP : SURFACE_EPSILON;
+    private void addVertices(Matrix4fc matrix, VertexConsumer vc, List<WakeChunk> chunks,
+                             boolean cameraSubmerged, boolean subdivide) {
+        // Height of the wake plane relative to the water surface:
+        //  - underwater: drop well below so the water doesn't occlude it from below.
+        //  - shader water: coplanar (0). The wake rides the same waves as the water and draws
+        //    after it in the same program, so it overlays the water surface like a foam mask
+        //    instead of floating above it (which looked like clipping on wave crests).
+        //  - no shaders / flat water: a tiny lift to avoid z-fighting the flat surface.
+        float surfaceBias;
+        if (cameraSubmerged) {
+            surfaceBias = -UNDERWATER_DROP;
+        } else if (subdivide) {
+            surfaceBias = 0f;
+        } else {
+            surfaceBias = SURFACE_EPSILON;
+        }
+        int grid = subdivide ? SHADER_GRID : 1;
         for (WakeChunk wakeChunk : chunks) {
             UVPair uv = wakeChunk.drawContext.getUV();
             float uvOffset = wakeChunk.drawContext.getUVOffset();
 
             float x0 = (float) wakeChunk.pos.x;
-            float y = (float) (wakeChunk.pos.y + WakeNode.WATER_OFFSET) + extraOffset + surfaceBias;
+            float y = (float) (wakeChunk.pos.y + WakeNode.WATER_OFFSET) + surfaceBias;
             float z0 = (float) wakeChunk.pos.z;
-            float x1 = x0 + WakeChunk.WIDTH;
-            float z1 = z0 + WakeChunk.WIDTH;
 
-            emitQuad(vc, matrix, x0, z0, x1, z1, y,
-                    uv.u(), uv.v(), uv.u() + uvOffset, uv.v() + uvOffset);
+            float cellW = WakeChunk.WIDTH / (float) grid;
+            float cellUV = uvOffset / grid;
+            for (int i = 0; i < grid; i++) {
+                for (int j = 0; j < grid; j++) {
+                    float cx0 = x0 + i * cellW;
+                    float cz0 = z0 + j * cellW;
+                    float cu0 = uv.u() + i * cellUV;
+                    float cv0 = uv.v() + j * cellUV;
+                    emitQuad(vc, matrix, cx0, cz0, cx0 + cellW, cz0 + cellW, y,
+                            cu0, cv0, cu0 + cellUV, cv0 + cellUV);
+                }
+            }
         }
     }
 

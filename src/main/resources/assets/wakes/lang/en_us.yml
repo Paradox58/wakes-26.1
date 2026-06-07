@@ -28,8 +28,6 @@ wakes:
         wakeResolution.tooltip: The pixel resolution of the wakes. Good for adjusting the wakes to better visually fit some resource packs.
         shaderLightPassthrough: Shader light passthrough
         shaderLightPassthrough.tooltip: Used to fine tune the appearance of wakes when using shaders. A higher value yields brighter wakes.
-        shaderWaterHeightOffset: Shader water height offset
-        shaderWaterHeightOffset.tooltip: Lifts wakes slightly when shaders are active so water-displacing shaders don't clip them. Increase if wakes disappear into wavy water.
         splashPlaneWidth: Width
         splashPlaneHeight: Height
         splashPlaneDepth: Depth
