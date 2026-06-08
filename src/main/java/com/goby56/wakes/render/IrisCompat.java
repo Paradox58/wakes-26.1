@@ -52,6 +52,7 @@ public final class IrisCompat {
         try {
             var ids = WorldRenderingSettings.INSTANCE.getBlockStateIds();
             if (ids == null) return -1;
+            // TODO Look at for future generic fluid API
             return ids.getInt(Blocks.WATER.defaultBlockState());
         } catch (Throwable t) {
             return -1;

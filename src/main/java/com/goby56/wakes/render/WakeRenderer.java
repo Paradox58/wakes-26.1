@@ -12,6 +12,8 @@ import net.minecraft.client.Minecraft;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.client.model.geom.builders.UVPair;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
@@ -25,7 +27,7 @@ import java.util.*;
 public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
 
     private static RenderType renderType() {
-        return RenderTypes.entityTranslucentEmissive(WakeTextureAtlas.ATLAS_ID);
+        return RenderTypes.entityTranslucent(WakeTextureAtlas.ATLAS_ID, false);
     }
 
     @Override
@@ -96,14 +98,9 @@ public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
     // When submerged, drop the plane clearly below the water surface so it isn't occluded
     // by the water's depth when looking up from underwater.
     private static final float UNDERWATER_DROP = 0.15f;
-    // Grid cells per chunk axis when shaders displace the wake. One quad spanning the whole
-    // 8-block chunk only has 4 corners, so shader wave displacement (sampled per vertex) is
-    // linearly interpolated across 8 blocks and cuts through the finely-waved water. Subdividing
-    // adds vertices so the wake follows the wave curve and stops clipping.
-    private static final int SHADER_GRID = WakeChunk.WIDTH; // one cell per block
 
     private void addVertices(Matrix4fc matrix, VertexConsumer vc, List<WakeChunk> chunks,
-                             boolean cameraSubmerged, boolean subdivide) {
+                             boolean cameraSubmerged, boolean irisWaterBlock) {
         // Height of the wake plane relative to the water surface:
         //  - underwater: drop well below so the water doesn't occlude it from below.
         //  - shader water: coplanar (0). The wake rides the same waves as the water and draws
@@ -113,31 +110,30 @@ public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
         float surfaceBias;
         if (cameraSubmerged) {
             surfaceBias = -UNDERWATER_DROP;
-        } else if (subdivide) {
+        } else if (irisWaterBlock) {
             surfaceBias = 0f;
         } else {
             surfaceBias = SURFACE_EPSILON;
         }
-        int grid = subdivide ? SHADER_GRID : 1;
+        ClientLevel world = Minecraft.getInstance().level;
         for (WakeChunk wakeChunk : chunks) {
-            UVPair uv = wakeChunk.drawContext.getUV();
-            float uvOffset = wakeChunk.drawContext.getUVOffset();
+            for (WakeNode wakeNode : wakeChunk.getNodes()) {
+                UVPair uv = wakeNode.drawContext.getUV();
+                float uvOffset = wakeNode.drawContext.getUVOffset();
+                int light = LevelRenderer.getLightCoords(world, wakeNode.blockPos());
 
-            float x0 = (float) wakeChunk.pos.x;
-            float y = (float) (wakeChunk.pos.y + WakeNode.WATER_OFFSET) + surfaceBias;
-            float z0 = (float) wakeChunk.pos.z;
+                float x0 = (float) wakeNode.x;
+                float y = (float) (wakeNode.y + WakeNode.WATER_OFFSET) + surfaceBias;
+                float z0 = (float) wakeNode.z;
 
-            float cellW = WakeChunk.WIDTH / (float) grid;
-            float cellUV = uvOffset / grid;
-            for (int i = 0; i < grid; i++) {
-                for (int j = 0; j < grid; j++) {
-                    float cx0 = x0 + i * cellW;
-                    float cz0 = z0 + j * cellW;
-                    float cu0 = uv.u() + i * cellUV;
-                    float cv0 = uv.v() + j * cellUV;
-                    emitQuad(vc, matrix, cx0, cz0, cx0 + cellW, cz0 + cellW, y,
-                            cu0, cv0, cu0 + cellUV, cv0 + cellUV);
-                }
+                emitQuad(vc, matrix,
+                        x0, z0,
+                        x0 + 1, z0 + 1,
+                        y,
+                        uv.u(), uv.v(),
+                        uv.u() + uvOffset,  uv.v() + uvOffset,
+                        light
+                );
             }
         }
     }
@@ -145,25 +141,25 @@ public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
     /** Emits a single horizontal quad (both windings, same height) spanning [x0,z0]..[x1,z1]. */
     private void emitQuad(VertexConsumer vc, Matrix4fc m,
                           float x0, float z0, float x1, float z1, float y,
-                          float u0, float v0, float u1, float v1) {
+                          float u0, float v0, float u1, float v1, int light) {
         // top-facing (CCW seen from above)
-        vert(vc, m, x0, y, z0, u0, v0, 1f);
-        vert(vc, m, x0, y, z1, u0, v1, 1f);
-        vert(vc, m, x1, y, z1, u1, v1, 1f);
-        vert(vc, m, x1, y, z0, u1, v0, 1f);
+        vert(vc, m, x0, y, z0, u0, v0, 1f, light);
+        vert(vc, m, x0, y, z1, u0, v1, 1f, light);
+        vert(vc, m, x1, y, z1, u1, v1, 1f, light);
+        vert(vc, m, x1, y, z0, u1, v0, 1f, light);
         // bottom-facing (reverse winding) so it's also visible from below
-        vert(vc, m, x1, y, z0, u1, v0, -1f);
-        vert(vc, m, x1, y, z1, u1, v1, -1f);
-        vert(vc, m, x0, y, z1, u0, v1, -1f);
-        vert(vc, m, x0, y, z0, u0, v0, -1f);
+        vert(vc, m, x1, y, z0, u1, v0, -1f, light);
+        vert(vc, m, x1, y, z1, u1, v1, -1f, light);
+        vert(vc, m, x0, y, z1, u0, v1, -1f, light);
+        vert(vc, m, x0, y, z0, u0, v0, -1f, light);
     }
 
-    private void vert(VertexConsumer vc, Matrix4fc m, float x, float y, float z, float u, float v, float ny) {
+    private void vert(VertexConsumer vc, Matrix4fc m, float x, float y, float z, float u, float v, float ny, int light) {
         vc.addVertex(m, x, y, z)
                 .setColor(1f, 1f, 1f, 1f) // white: let the atlas texture provide the wake color/alpha
                 .setUv(u, v)
                 .setOverlay(OverlayTexture.NO_OVERLAY)
-                .setLight(LightCoordsUtil.FULL_BRIGHT)
+                .setLight(light)
                 .setNormal(0f, ny, 0f);
     }
 

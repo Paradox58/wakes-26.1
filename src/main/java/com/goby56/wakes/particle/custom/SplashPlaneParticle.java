@@ -130,11 +130,10 @@ public class SplashPlaneParticle extends Particle {
         }
 
         int fluidColor = BiomeColors.getAverageWaterColor(level, this.owner.blockPosition());
-        int lightCol = WakesUtils.getLightColor(level, this.owner.blockPosition());
         float opacity = WakesConfig.wakeOpacity * 0.9f;
         for (int r = 0; r < res; r++) {
             for (int c = 0; c < res; c++) {
-                int color = simulationNode.getPixelColor(c, r, fluidColor, lightCol, opacity);
+                int color = simulationNode.getPixelColor(c, r, fluidColor, opacity);
                 this.image.setPixel(c, r, color);
             }
         }
