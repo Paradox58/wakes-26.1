@@ -68,24 +68,12 @@ public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
             RenderType type = renderType();
             VertexConsumer vc = bufferSource.getBuffer(type);
 
-            // When a shaderpack is active, make the wake follow the shader's water waves:
-            //  1) tag the vertices with water's block id (mc_Entity) so the shader's
-            //     water-detection passes, and
-            //  2) route the draw through the water program where the wave displacement lives.
-            boolean useWaterProgram = WakesClient.areShadersEnabled && IrisCompat.isLoaded();
-
-            if (useWaterProgram) IrisCompat.beginWaterBlock(vc);
-            // Subdivide into a grid only when the shader is displacing the wake, so it follows
-            // the wave curve. Without shaders a single flat quad is fine (and cheaper).
-            addVertices(matrix, vc, wakeChunks, cameraSubmerged, useWaterProgram);
-            if (useWaterProgram) IrisCompat.endWaterBlock(vc);
+            addVertices(matrix, vc, wakeChunks, cameraSubmerged);
 
             matrices.popPose();
 
-            if (useWaterProgram) IrisCompat.beginWaterProgram();
             // Flush immediately so it draws into the currently-bound (Iris) framebuffer
             bufferSource.endBatch(type);
-            if (useWaterProgram) IrisCompat.endWaterProgram();
         } catch (Throwable t) {
             WakesClient.LOGGER.error("WakeRenderer: EXCEPTION during render", t);
         }
@@ -100,21 +88,14 @@ public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
     private static final float UNDERWATER_DROP = 0.15f;
 
     private void addVertices(Matrix4fc matrix, VertexConsumer vc, List<WakeChunk> chunks,
-                             boolean cameraSubmerged, boolean irisWaterBlock) {
-        // Height of the wake plane relative to the water surface:
-        //  - underwater: drop well below so the water doesn't occlude it from below.
-        //  - shader water: coplanar (0). The wake rides the same waves as the water and draws
-        //    after it in the same program, so it overlays the water surface like a foam mask
-        //    instead of floating above it (which looked like clipping on wave crests).
-        //  - no shaders / flat water: a tiny lift to avoid z-fighting the flat surface.
-        float surfaceBias;
-        if (cameraSubmerged) {
-            surfaceBias = -UNDERWATER_DROP;
-        } else if (irisWaterBlock) {
-            surfaceBias = 0f;
-        } else {
-            surfaceBias = SURFACE_EPSILON;
-        }
+                             boolean cameraSubmerged) {
+        // Water-displacing shaders write a wavy water surface into the depth buffer, which can
+        // occlude (clip) the flat wake plane. Lift the wake by a configurable amount when
+        // shaders are active so it stays above the displaced surface.
+        float extraOffset = WakesClient.areShadersEnabled ? WakesConfig.shaderWaterHeightOffset : 0f;
+        // Place the wake just below the surface when the camera is underwater (so it isn't
+        // occluded by the water from below), otherwise just above it.
+        float surfaceBias = (cameraSubmerged ? -UNDERWATER_DROP : SURFACE_EPSILON) + extraOffset;
         ClientLevel world = Minecraft.getInstance().level;
         for (WakeChunk wakeChunk : chunks) {
             for (WakeNode wakeNode : wakeChunk.getNodes()) {
