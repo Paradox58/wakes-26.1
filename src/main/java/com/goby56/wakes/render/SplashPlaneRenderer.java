@@ -14,12 +14,14 @@ import io.github.jdiemke.triangulation.Vector2D;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.util.LightCoordsUtil;
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import com.mojang.math.Axis;
 import net.minecraft.world.phys.Vec3;
@@ -108,11 +110,13 @@ public class SplashPlaneRenderer implements LevelRenderEvents.AfterTranslucentTe
             return;
         }
         texture.loadTexture(splashPlane.image);
-        renderSurface(matrix, texture, context.bufferSource());
+        ClientLevel world = Minecraft.getInstance().level;
+        int light = LevelRenderer.getLightCoords(world, BlockPos.containing(entity.getX(), entity.getY(), entity.getZ()));
+        renderSurface(matrix, texture, context.bufferSource(), light);
     }
 
-    private static void renderSurface(Matrix4f matrix, SplashPlaneTexture splashTexture, MultiBufferSource.BufferSource bufferSource) {
-        RenderType type = RenderTypes.entityTranslucentEmissive(splashTexture.id);
+    private static void renderSurface(Matrix4f matrix, SplashPlaneTexture splashTexture, MultiBufferSource.BufferSource bufferSource, int light) {
+        RenderType type = RenderTypes.entityTranslucent(splashTexture.id, false);
         VertexConsumer vc = bufferSource.getBuffer(type);
         for (int s = -1; s < 2; s++) {
             if (s == 0) continue;
@@ -123,8 +127,8 @@ public class SplashPlaneRenderer implements LevelRenderEvents.AfterTranslucentTe
                 Vec3 n1 = normals.get(i + 1);
                 Vec3 v2 = vertices.get(i + 2);
                 Vec3 n2 = normals.get(i + 2);
-                addDegenerateQuad(vc, matrix, s, v0, n0, v1, n1, v2, n2);
-                addDegenerateQuad(vc, matrix, s, v0, n0, v2, n2, v1, n1);
+                addDegenerateQuad(vc, matrix, s, v0, n0, v1, n1, v2, n2, light);
+                addDegenerateQuad(vc, matrix, s, v0, n0, v2, n2, v1, n1, light);
             }
         }
         // The splash plane textures are shared per resolution, so flush this particle's
@@ -132,7 +136,7 @@ public class SplashPlaneRenderer implements LevelRenderEvents.AfterTranslucentTe
         bufferSource.endBatch(type);
     }
 
-    private static void addVertex(VertexConsumer vc, Matrix4f matrix, int side, Vec3 vertex, Vec3 normal) {
+    private static void addVertex(VertexConsumer vc, Matrix4f matrix, int side, Vec3 vertex, Vec3 normal, int light) {
         vc.addVertex(matrix,
                         (float) (side * (vertex.x * WakesConfig.splashPlaneWidth + WakesConfig.splashPlaneGap)),
                         (float) (vertex.z * WakesConfig.splashPlaneHeight),
@@ -140,15 +144,15 @@ public class SplashPlaneRenderer implements LevelRenderEvents.AfterTranslucentTe
                 .setColor(1f, 1f, 1f, 1f)
                 .setUv((float) vertex.x, (float) vertex.y)
                 .setOverlay(OverlayTexture.NO_OVERLAY)
-                .setLight(LightCoordsUtil.FULL_BRIGHT)
+                .setLight(light)
                 .setNormal((float) normal.x, (float) normal.y, (float) normal.z);
     }
 
-    private static void addDegenerateQuad(VertexConsumer vc, Matrix4f matrix, int side, Vec3 a, Vec3 an, Vec3 b, Vec3 bn, Vec3 c, Vec3 cn) {
-        addVertex(vc, matrix, side, a, an);
-        addVertex(vc, matrix, side, b, bn);
-        addVertex(vc, matrix, side, c, cn);
-        addVertex(vc, matrix, side, c, cn);
+    private static void addDegenerateQuad(VertexConsumer vc, Matrix4f matrix, int side, Vec3 a, Vec3 an, Vec3 b, Vec3 bn, Vec3 c, Vec3 cn, int light) {
+        addVertex(vc, matrix, side, a, an, light);
+        addVertex(vc, matrix, side, b, bn, light);
+        addVertex(vc, matrix, side, c, cn, light);
+        addVertex(vc, matrix, side, c, cn, light);
     }
 
     private static double upperBound(double x) {
