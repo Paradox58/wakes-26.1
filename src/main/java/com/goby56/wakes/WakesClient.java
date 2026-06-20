@@ -20,6 +20,7 @@ import net.fabricmc.fabric.api.entity.event.v1.ServerEntityLevelChangeEvents;
 import net.fabricmc.loader.api.FabricLoader;
 import net.fabricmc.loader.api.metadata.ModMetadata;
 import net.irisshaders.iris.api.v0.IrisApi;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.debug.DebugScreenEntries;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.resources.Identifier;
@@ -73,9 +74,14 @@ public class WakesClient implements ClientModInitializer {
                 (context, deltaTracker) -> {
                     if (!WakesConfig.showAtlas) return;
                     WakeHandler.getInstance().ifPresent(wh -> {
-                        int atlasRes = wh.getTextureAtlas().resolution;
+                        WakeTextureAtlas atlas = wh.getTextureAtlas();
+                        int screenH = Minecraft.getInstance().getWindow().getGuiScaledHeight();
+                        // Largest whole-pixel cell size that fits all 64 columns on screen
+                        int cellPx = screenH / WakeTextureAtlas.ATLAS_WIDTH;
+                        int size = cellPx * WakeTextureAtlas.ATLAS_WIDTH;
+                        int scaledDim = size * atlas.resolution / atlas.effectiveResolution;
                         context.blit(RenderPipelines.GUI_TEXTURED, WakeTextureAtlas.ATLAS_ID,
-                                4, 4, 0, 0, 256, 256, atlasRes, atlasRes);
+                                0, 0, 0, 0, size, size, scaledDim, scaledDim);
                     });
                 });
 	}

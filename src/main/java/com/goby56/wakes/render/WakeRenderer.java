@@ -33,7 +33,6 @@ public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
     @Override
     public void afterTranslucentTerrain(LevelRenderContext context) {
         if (WakesConfig.disableMod) {
-            WakesDebugInfo.quadsRendered = 0;
             return;
         }
 
@@ -90,8 +89,8 @@ public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
             WakesClient.LOGGER.error("WakeRenderer: EXCEPTION during render", t);
         }
 
-        WakesDebugInfo.renderingTime.add(System.nanoTime() - tRendering);
-        WakesDebugInfo.quadsRendered = wakeChunks.size();
+        WakesDebugInfo.addRenderTime(System.nanoTime() - tRendering);
+        WakesDebugInfo.visibleNodes = wakeChunks.stream().mapToInt(c -> c.occupied).sum();
     }
 
     private static final float SURFACE_EPSILON = 0.06f;

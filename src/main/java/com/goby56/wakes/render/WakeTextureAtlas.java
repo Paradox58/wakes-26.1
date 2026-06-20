@@ -26,7 +26,7 @@ public class WakeTextureAtlas {
 
     private final boolean[] occupiedSubTextures = new boolean[CAPACITY];
 
-    private static final int CAPACITY = ATLAS_WIDTH * ATLAS_WIDTH - 1; // Include error texture
+    public static final int CAPACITY = ATLAS_WIDTH * ATLAS_WIDTH - 1; // Include error texture
 
     public WakeTextureAtlas() {
         resolution = Resolution.getHighest().res * ATLAS_WIDTH;
@@ -60,6 +60,12 @@ public class WakeTextureAtlas {
 
     protected void vacateSubTexture(int subTextureIndex) {
         occupiedSubTextures[subTextureIndex] = false;
+    }
+
+    public int occupiedCount() {
+        int count = 0;
+        for (boolean b : occupiedSubTextures) if (b) count++;
+        return count;
     }
 
     public static class DrawContext {

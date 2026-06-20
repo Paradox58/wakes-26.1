@@ -49,10 +49,10 @@ public class WakeChunk {
             }
         }
         WakesDebugInfo.nodeLogicTime += (System.nanoTime() - tNode);
-        long tTexturing = System.nanoTime();
+        long tWrite = System.nanoTime();
         drawWakes();
-        WakesDebugInfo.texturingTime += (System.nanoTime() - tTexturing);
-        WakesDebugInfo.nodeCount += occupied;
+        WakesDebugInfo.atlasWriteTime += (System.nanoTime() - tWrite);
+        WakesDebugInfo.totalNodes += occupied;
         return occupied != 0;
     }
 

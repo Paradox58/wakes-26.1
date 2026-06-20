@@ -1,6 +1,7 @@
 package com.goby56.wakes.render;
 
 import com.goby56.wakes.config.WakesConfig;
+import com.goby56.wakes.debug.WakesDebugInfo;
 import com.goby56.wakes.duck.ProducesWake;
 import com.goby56.wakes.particle.custom.SplashPlaneParticle;
 import com.goby56.wakes.simulation.WakeHandler;
@@ -79,6 +80,7 @@ public class SplashPlaneRenderer implements LevelRenderEvents.AfterTranslucentTe
             SplashPlaneRenderer.render(particle.owner, particle, context, new PoseStack(), vc);
         }
         bufferSource.endBatch(type);
+        WakesDebugInfo.splashPlanes = planes.size();
     }
 
 
