@@ -138,29 +138,24 @@ public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
         }
     }
 
-    /** Emits a single horizontal quad (both windings, same height) spanning [x0,z0]..[x1,z1]. */
+    /** Emits a single horizontal quad spanning [x0,z0]..[x1,z1].
+     *  entityTranslucent uses NO_CULL so this single quad is visible from both sides. */
     private void emitQuad(VertexConsumer vc, Matrix4fc m,
                           float x0, float z0, float x1, float z1, float y,
                           float u0, float v0, float u1, float v1, int light) {
-        // top-facing (CCW seen from above)
-        vert(vc, m, x0, y, z0, u0, v0, 1f, light);
-        vert(vc, m, x0, y, z1, u0, v1, 1f, light);
-        vert(vc, m, x1, y, z1, u1, v1, 1f, light);
-        vert(vc, m, x1, y, z0, u1, v0, 1f, light);
-        // bottom-facing (reverse winding) so it's also visible from below
-        vert(vc, m, x1, y, z0, u1, v0, -1f, light);
-        vert(vc, m, x1, y, z1, u1, v1, -1f, light);
-        vert(vc, m, x0, y, z1, u0, v1, -1f, light);
-        vert(vc, m, x0, y, z0, u0, v0, -1f, light);
+        vert(vc, m, x0, y, z0, u0, v0, light);
+        vert(vc, m, x0, y, z1, u0, v1, light);
+        vert(vc, m, x1, y, z1, u1, v1, light);
+        vert(vc, m, x1, y, z0, u1, v0, light);
     }
 
-    private void vert(VertexConsumer vc, Matrix4fc m, float x, float y, float z, float u, float v, float ny, int light) {
+    private void vert(VertexConsumer vc, Matrix4fc m, float x, float y, float z, float u, float v, int light) {
         vc.addVertex(m, x, y, z)
                 .setColor(1f, 1f, 1f, 1f) // white: let the atlas texture provide the wake color/alpha
                 .setUv(u, v)
                 .setOverlay(OverlayTexture.NO_OVERLAY)
                 .setLight(light)
-                .setNormal(0f, ny, 0f);
+                .setNormal(0f, 1f, 0f);
     }
 
     public void close() {
