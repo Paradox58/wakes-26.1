@@ -8,6 +8,8 @@ import com.goby56.wakes.event.WakeWorldTicker;
 import com.goby56.wakes.particle.ModParticles;
 import com.goby56.wakes.render.SplashPlaneRenderer;
 import com.goby56.wakes.render.WakeRenderer;
+import com.goby56.wakes.render.WakeTextureAtlas;
+import com.goby56.wakes.simulation.WakeHandler;
 import com.mojang.blaze3d.pipeline.RenderPipeline;
 import eu.midnightdust.lib.config.MidnightConfig;
 import net.fabricmc.api.ClientModInitializer;
@@ -65,6 +67,17 @@ public class WakesClient implements ClientModInitializer {
         DebugScreenEntries.register(
                 Identifier.fromNamespaceAndPath("wakes", "debug_entry"),
                 new WakesDebugInfo());
+
+        HudElementRegistry.addLast(
+                Identifier.fromNamespaceAndPath(MOD_ID, "atlas_debug"),
+                (context, deltaTracker) -> {
+                    if (!WakesConfig.showAtlas) return;
+                    WakeHandler.getInstance().ifPresent(wh -> {
+                        int atlasRes = wh.getTextureAtlas().resolution;
+                        context.blit(RenderPipelines.GUI_TEXTURED, WakeTextureAtlas.ATLAS_ID,
+                                4, 4, 0, 0, 256, 256, atlasRes, atlasRes);
+                    });
+                });
 	}
 
 	public static boolean areShadersEnabled() {

@@ -69,6 +69,7 @@ public class WakesConfig extends MidnightConfig {
     @Entry(category = DEBUG) public static boolean debugColors = false;
     @Entry(category = DEBUG) public static boolean drawDebugBoxes = false;
     @Entry(category = DEBUG) public static boolean showDebugInfo = false;
+    @Entry(category = DEBUG) public static boolean showAtlas = false;
     @Entry(category = DEBUG, isSlider = true, min = 1, max = 6) public static int floodFillDistance = 2;
     @Entry(category = DEBUG, isSlider = true, min = 1, max = 20) public static int floodFillTickDelay = 2;
 
