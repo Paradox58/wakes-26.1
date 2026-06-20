@@ -1,7 +1,6 @@
 package com.goby56.wakes.render;
 
 import com.goby56.wakes.config.WakesConfig;
-import com.goby56.wakes.config.enums.Resolution;
 import com.goby56.wakes.duck.ProducesWake;
 import com.goby56.wakes.particle.custom.SplashPlaneParticle;
 import com.goby56.wakes.simulation.WakeHandler;
@@ -17,6 +16,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.model.geom.builders.UVPair;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
@@ -29,7 +29,6 @@ import org.joml.Matrix4f;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 public class SplashPlaneRenderer implements LevelRenderEvents.AfterTranslucentTerrain, LevelRenderEvents.BeforeTranslucentTerrain {
 
@@ -37,16 +36,6 @@ public class SplashPlaneRenderer implements LevelRenderEvents.AfterTranslucentTe
     private static List<Triangle2D> triangles;
     private static ArrayList<Vec3> vertices;
     private static ArrayList<Vec3> normals;
-
-    public static Map<Resolution, SplashPlaneTexture> wakeTextures = null;
-
-    private static void initTextures() {
-        wakeTextures = Map.of(
-                Resolution.EIGHT, new SplashPlaneTexture(Resolution.EIGHT.res),
-                Resolution.SIXTEEN, new SplashPlaneTexture(Resolution.SIXTEEN.res),
-                Resolution.THIRTYTWO, new SplashPlaneTexture(Resolution.THIRTYTWO.res)
-        );
-    }
 
     private static final double SQRT_8 = Math.sqrt(8);
 
@@ -77,14 +66,23 @@ public class SplashPlaneRenderer implements LevelRenderEvents.AfterTranslucentTe
             return;
         }
         WakeHandler wakeHandler = WakeHandler.getInstance().get();
-        for (SplashPlaneParticle particle : wakeHandler.getVisibleSplashPlanes()) {
-            SplashPlaneRenderer.render(particle.owner, particle, context, new PoseStack());
+        List<SplashPlaneParticle> planes = wakeHandler.getVisibleSplashPlanes();
+        if (planes.isEmpty()) return;
+
+        wakeHandler.getTextureAtlas().dynamicTexture.uploadIfDirty();
+
+        MultiBufferSource.BufferSource bufferSource = context.bufferSource();
+        RenderType type = RenderTypes.entityTranslucent(WakeTextureAtlas.ATLAS_ID, false);
+        VertexConsumer vc = bufferSource.getBuffer(type);
+
+        for (SplashPlaneParticle particle : planes) {
+            SplashPlaneRenderer.render(particle.owner, particle, context, new PoseStack(), vc);
         }
+        bufferSource.endBatch(type);
     }
 
 
-    public static <T extends Entity> void render(T entity, SplashPlaneParticle splashPlane, LevelRenderContext context, PoseStack matrices) {
-        if (wakeTextures == null) initTextures();
+    public static <T extends Entity> void render(T entity, SplashPlaneParticle splashPlane, LevelRenderContext context, PoseStack matrices, VertexConsumer vc) {
         if (WakesConfig.disableMod || !WakesUtils.getEffectRuleFromSource(entity).renderPlanes) {
             return;
         }
@@ -93,6 +91,8 @@ public class SplashPlaneRenderer implements LevelRenderEvents.AfterTranslucentTe
                 splashPlane.owner instanceof LocalPlayer) {
             return;
         }
+        if (splashPlane.drawContext == null) return;
+
         splashPlane.updateYaw(context.gameRenderer().getMainCamera().getCameraEntityPartialTicks(net.minecraft.client.Minecraft.getInstance().getDeltaTracker()));
 
         matrices.pushPose();
@@ -105,19 +105,14 @@ public class SplashPlaneRenderer implements LevelRenderEvents.AfterTranslucentTe
         Matrix4f matrix = matrices.last().pose();
         matrices.popPose();
 
-        SplashPlaneTexture texture = wakeTextures.get(WakeHandler.resolution);
-        if (texture.resolution != splashPlane.image.getWidth()) {
-            return;
-        }
-        texture.loadTexture(splashPlane.image);
         ClientLevel world = Minecraft.getInstance().level;
         int light = LevelRenderer.getLightCoords(world, BlockPos.containing(entity.getX(), entity.getY(), entity.getZ()));
-        renderSurface(matrix, texture, context.bufferSource(), light);
+        renderSurface(matrix, splashPlane.drawContext, vc, light);
     }
 
-    private static void renderSurface(Matrix4f matrix, SplashPlaneTexture splashTexture, MultiBufferSource.BufferSource bufferSource, int light) {
-        RenderType type = RenderTypes.entityTranslucent(splashTexture.id, false);
-        VertexConsumer vc = bufferSource.getBuffer(type);
+    private static void renderSurface(Matrix4f matrix, WakeTextureAtlas.DrawContext drawContext, VertexConsumer vc, int light) {
+        UVPair uv = drawContext.getUV();
+        float uvOffset = drawContext.getUVOffset();
         for (int s = -1; s < 2; s++) {
             if (s == 0) continue;
             for (int i = 0; i < vertices.size(); i += 3) {
@@ -127,32 +122,29 @@ public class SplashPlaneRenderer implements LevelRenderEvents.AfterTranslucentTe
                 Vec3 n1 = normals.get(i + 1);
                 Vec3 v2 = vertices.get(i + 2);
                 Vec3 n2 = normals.get(i + 2);
-                addDegenerateQuad(vc, matrix, s, v0, n0, v1, n1, v2, n2, light);
-                addDegenerateQuad(vc, matrix, s, v0, n0, v2, n2, v1, n1, light);
+                addDegenerateQuad(vc, matrix, s, v0, n0, v1, n1, v2, n2, uv, uvOffset, light);
+                addDegenerateQuad(vc, matrix, s, v0, n0, v2, n2, v1, n1, uv, uvOffset, light);
             }
         }
-        // The splash plane textures are shared per resolution, so flush this particle's
-        // geometry now before the next particle overwrites the texture.
-        bufferSource.endBatch(type);
     }
 
-    private static void addVertex(VertexConsumer vc, Matrix4f matrix, int side, Vec3 vertex, Vec3 normal, int light) {
+    private static void addVertex(VertexConsumer vc, Matrix4f matrix, int side, Vec3 vertex, Vec3 normal, UVPair uv, float uvOffset, int light) {
         vc.addVertex(matrix,
                         (float) (side * (vertex.x * WakesConfig.splashPlaneWidth + WakesConfig.splashPlaneGap)),
                         (float) (vertex.z * WakesConfig.splashPlaneHeight),
                         (float) (vertex.y * WakesConfig.splashPlaneDepth))
                 .setColor(1f, 1f, 1f, 1f)
-                .setUv((float) vertex.x, (float) vertex.y)
+                .setUv(uv.u() + (float) vertex.x * uvOffset, uv.v() + (float) vertex.y * uvOffset)
                 .setOverlay(OverlayTexture.NO_OVERLAY)
                 .setLight(light)
                 .setNormal((float) normal.x, (float) normal.y, (float) normal.z);
     }
 
-    private static void addDegenerateQuad(VertexConsumer vc, Matrix4f matrix, int side, Vec3 a, Vec3 an, Vec3 b, Vec3 bn, Vec3 c, Vec3 cn, int light) {
-        addVertex(vc, matrix, side, a, an, light);
-        addVertex(vc, matrix, side, b, bn, light);
-        addVertex(vc, matrix, side, c, cn, light);
-        addVertex(vc, matrix, side, c, cn, light);
+    private static void addDegenerateQuad(VertexConsumer vc, Matrix4f matrix, int side, Vec3 a, Vec3 an, Vec3 b, Vec3 bn, Vec3 c, Vec3 cn, UVPair uv, float uvOffset, int light) {
+        addVertex(vc, matrix, side, a, an, uv, uvOffset, light);
+        addVertex(vc, matrix, side, b, bn, uv, uvOffset, light);
+        addVertex(vc, matrix, side, c, cn, uv, uvOffset, light);
+        addVertex(vc, matrix, side, c, cn, uv, uvOffset, light);
     }
 
     private static double upperBound(double x) {
