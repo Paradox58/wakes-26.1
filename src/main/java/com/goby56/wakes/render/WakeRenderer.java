@@ -18,20 +18,35 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.client.renderer.texture.OverlayTexture;
-import net.minecraft.util.LightCoordsUtil;
 import net.minecraft.world.phys.Vec3;
 import org.joml.Matrix4fc;
 
 import java.util.*;
 
-public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
+public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain, LevelRenderEvents.BeforeTranslucentTerrain {
 
     private static RenderType renderType() {
         return RenderTypes.entityTranslucent(WakeTextureAtlas.ATLAS_ID, false);
     }
 
+    private static boolean cameraSubmerged(LevelRenderContext context) {
+        return context.gameRenderer().getMainCamera().getFluidInCamera()
+                == net.minecraft.world.level.material.FogType.WATER;
+    }
+
     @Override
     public void afterTranslucentTerrain(LevelRenderContext context) {
+        if (cameraSubmerged(context)) return;
+        render(context);
+    }
+
+    @Override
+    public void beforeTranslucentTerrain(LevelRenderContext context) {
+        if (!cameraSubmerged(context)) return;
+        render(context);
+    }
+
+    private void render(LevelRenderContext context) {
         if (WakesConfig.disableMod) {
             return;
         }
@@ -53,11 +68,6 @@ public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
 
             Vec3 camera = context.levelState().cameraRenderState.pos;
 
-            // Is the camera underwater? Pick which side of the water surface to place the
-            // single wake plane so it isn't depth-occluded by the water for this viewpoint.
-            boolean cameraSubmerged = context.gameRenderer().getMainCamera().getFluidInCamera()
-                    == net.minecraft.world.level.material.FogType.WATER;
-
             PoseStack matrices = context.poseStack();
             matrices.pushPose();
             matrices.translate(-camera.x, -camera.y, -camera.z);
@@ -67,7 +77,7 @@ public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
             RenderType type = renderType();
             VertexConsumer vc = bufferSource.getBuffer(type);
 
-            addVertices(matrix, vc, wakeChunks, cameraSubmerged);
+            addVertices(matrix, vc, wakeChunks);
 
             matrices.popPose();
 
@@ -81,20 +91,14 @@ public class WakeRenderer implements LevelRenderEvents.AfterTranslucentTerrain {
         WakesDebugInfo.visibleNodes = wakeChunks.stream().mapToInt(c -> c.occupied).sum();
     }
 
-    private static final float SURFACE_EPSILON = 0.06f;
-    // When submerged, drop the plane clearly below the water surface so it isn't occluded
-    // by the water's depth when looking up from underwater.
-    private static final float UNDERWATER_DROP = 0.15f;
+    private static final float SURFACE_EPSILON = 0.01f;
 
-    private void addVertices(Matrix4fc matrix, VertexConsumer vc, List<WakeChunk> chunks,
-                             boolean cameraSubmerged) {
+    private void addVertices(Matrix4fc matrix, VertexConsumer vc, List<WakeChunk> chunks) {
         // Water-displacing shaders write a wavy water surface into the depth buffer, which can
         // occlude (clip) the flat wake plane. Lift the wake by a configurable amount when
         // shaders are active so it stays above the displaced surface.
         float extraOffset = WakesClient.areShadersEnabled ? WakesConfig.shaderWaterHeightOffset : 0f;
-        // Place the wake just below the surface when the camera is underwater (so it isn't
-        // occluded by the water from below), otherwise just above it.
-        float surfaceBias = (cameraSubmerged ? -UNDERWATER_DROP : SURFACE_EPSILON) + extraOffset;
+        float surfaceBias = SURFACE_EPSILON + extraOffset;
         ClientLevel world = Minecraft.getInstance().level;
         for (WakeChunk wakeChunk : chunks) {
             for (WakeNode wakeNode : wakeChunk.getNodes()) {
