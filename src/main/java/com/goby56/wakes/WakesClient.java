@@ -71,19 +71,7 @@ public class WakesClient implements ClientModInitializer {
 
         HudElementRegistry.addLast(
                 Identifier.fromNamespaceAndPath(MOD_ID, "atlas_debug"),
-                (context, deltaTracker) -> {
-                    if (!WakesConfig.showAtlas) return;
-                    WakeHandler.getInstance().ifPresent(wh -> {
-                        WakeTextureAtlas atlas = wh.getTextureAtlas();
-                        int screenH = Minecraft.getInstance().getWindow().getGuiScaledHeight();
-                        // Largest whole-pixel cell size that fits all 64 columns on screen
-                        int cellPx = screenH / WakeTextureAtlas.ATLAS_WIDTH;
-                        int size = cellPx * WakeTextureAtlas.ATLAS_WIDTH;
-                        int scaledDim = size * atlas.resolution / atlas.effectiveResolution;
-                        context.blit(RenderPipelines.GUI_TEXTURED, WakeTextureAtlas.ATLAS_ID,
-                                0, 0, 0, 0, size, size, scaledDim, scaledDim);
-                    });
-                });
+                WakeDebugRenderer::drawAtlasOverlay);
 	}
 
 	public static boolean areShadersEnabled() {
