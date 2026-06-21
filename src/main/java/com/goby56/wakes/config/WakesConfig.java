@@ -38,8 +38,7 @@ public class WakesConfig extends MidnightConfig {
     @Entry(category = APPEARANCE, isSlider = true, min = 0, max = 1) public static float blendStrength = 0.5f;
     @Entry(category = APPEARANCE) public static boolean firstPersonEffects = false;
     @Entry(category = APPEARANCE) public static boolean spawnParticles = true;
-    @Entry(category = APPEARANCE, isSlider = true, min = 0, max = 1) public static float shaderLightPassthrough = 0.5f;
-    @Entry(category = APPEARANCE, isSlider = true, min = 0, max = 0.5f) public static float shaderWaterHeightOffset = 0.05f;
+    @Entry(category = APPEARANCE, isSlider = true, min = 0, max = 0.5f) public static float shaderWaterHeightOffset = 0.0f;
 
     // Splash plane
     @Comment(category = APPEARANCE, centered = true) public static Comment splashPlaneDivider;
