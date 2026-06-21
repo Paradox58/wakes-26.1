@@ -51,7 +51,7 @@ dependencies {
 
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
-	implementation "maven.modrinth:midnightlib:${project.midnightlib_version}"
+	include(implementation("maven.modrinth:midnightlib:${project.midnightlib_version}"))
 
 	compileOnly "maven.modrinth:iris:${project.iris_version}"
 
